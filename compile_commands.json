@@ -1,0 +1,15 @@
+[
+  {
+    "directory": "Z:\\Making_Games\\LLM>",
+    "arguments": [
+      "clang",
+      "@clang_options.rsp",
+      "-Ivendor\\llama.cpp\\include",
+      "-Ivendor\\llama.cpp\\ggml\\include",
+      "src\\main.cpp",
+      "-o",
+      "build/main.exe"
+    ],
+    "file": "src2\\main.c"
+  }
+]

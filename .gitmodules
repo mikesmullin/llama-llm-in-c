@@ -1,0 +1,6 @@
+[submodule "vendor/llama.cpp"]
+	path = vendor/llama.cpp
+	url = https://github.com/ggerganov/llama.cpp
+[submodule "vendor/vcpkg"]
+	path = vendor/vcpkg
+	url = https://github.com/microsoft/vcpkg.git
