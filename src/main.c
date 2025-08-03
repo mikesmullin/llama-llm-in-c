@@ -4,10 +4,10 @@
 #include <string.h>
 
 static const char* MODEL_PATH = "vendor/models/SmolLM2-1.7B-Instruct-Q4_K_M.gguf";
-static const char* INIT_PROMPT =
-    "you are an in-game npc agent "
-    "with this persona: A friendly tavern keeper. "
-    "The scenario: greeting a traveler.";
+// static const char* INIT_PROMPT =
+//     "you are an in-game npc agent "
+//     "with this persona: A friendly tavern keeper. "
+//     "The scenario: greeting a traveler.";
 
 #define MAX_RESPONSE_SIZE 8192
 #define MAX_PROMPT_SIZE 4096
@@ -150,40 +150,42 @@ int main(void) {
   char* formatted = (char*)malloc(ctx_params.n_ctx);
   int formatted_capacity = ctx_params.n_ctx, prev_len = 0;
 
+  int new_len;
   const char* chat_template = llama_model_chat_template(model, NULL);
-  add_message(&messages, &msg_count, &msg_capacity, "user", INIT_PROMPT);
-  int new_len =
-      apply_chat_template(chat_template, messages, msg_count, 1, &formatted, &formatted_capacity);
-  if (new_len < 0) {
-    return fprintf(stderr, "Template application failed\n"), 1;
-  }
+  // add_message(&messages, &msg_count, &msg_capacity, "user", INIT_PROMPT);
+  // int new_len =
+  //     apply_chat_template(chat_template, messages, msg_count, 1, &formatted, &formatted_capacity);
+  // if (new_len < 0) {
+  //   return fprintf(stderr, "Template application failed\n"), 1;
+  // }
 
   char prompt[MAX_PROMPT_SIZE];
-  int prompt_len = (new_len > MAX_PROMPT_SIZE - 1) ? MAX_PROMPT_SIZE - 1 : new_len;
-  memcpy(prompt, formatted, prompt_len);
-  prompt[prompt_len] = '\0';
+  // int prompt_len = (new_len > MAX_PROMPT_SIZE - 1) ? MAX_PROMPT_SIZE - 1 : new_len;
+  // memcpy(prompt, formatted, prompt_len);
+  // prompt[prompt_len] = '\0';
 
-  printf("\033[33m");
-  char* response = generate_response(prompt, ctx, sampler, vocab);
-  printf("\n\033[0m");
+  // printf("\033[33m");
+  // char* response = generate_response(prompt, ctx, sampler, vocab);
+  // printf("\n\033[0m");
 
-  add_message(&messages, &msg_count, &msg_capacity, "assistant", response);
-  prev_len = llama_chat_apply_template(chat_template, messages, msg_count, 0, NULL, 0);
-  if (prev_len < 0) {
-    return fprintf(stderr, "Template application failed\n"), 1;
-  }
+  // add_message(&messages, &msg_count, &msg_capacity, "assistant", response);
+  // prev_len = llama_chat_apply_template(chat_template, messages, msg_count, 0, NULL, 0);
+  // if (prev_len < 0) {
+  //   return fprintf(stderr, "Template application failed\n"), 1;
+  // }
 
   while (1) {
     printf("\033[32m> \033[0m");
     char user_input[MAX_USER_INPUT];
-    if (!fgets(user_input, sizeof(user_input), stdin)) {
-      break;
+    user_input[0] = '\0';
+    int input_len = 0;
+    int c;
+    // detect Ctrl+Z (ASCII 26) as end of input.
+    while ((c = getchar()) != EOF && c != 26 && input_len < MAX_USER_INPUT - 1) {
+      user_input[input_len++] = (char)c;
     }
-    size_t len = strlen(user_input);
-    if (len > 0 && user_input[len - 1] == '\n') {
-      user_input[len - 1] = '\0';
-    }
-    if (user_input[0] == '\0') {
+    user_input[input_len] = '\0';
+    if ((c == EOF || c == 26) && input_len == 0) {
       break;
     }
 
