@@ -3,16 +3,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const char* MODEL_PATH = "vendor/models/SmolLM2-1.7B-Instruct-Q4_K_M.gguf";
-// static const char* INIT_PROMPT =
-//     "you are an in-game npc agent "
-//     "with this persona: A friendly tavern keeper. "
-//     "The scenario: greeting a traveler.";
+#include "cmd.c"
+#include "regex.h"  // tiny-regex-c
 
-#define MAX_RESPONSE_SIZE 8192
-#define MAX_PROMPT_SIZE 4096
-#define MAX_USER_INPUT 1024
+// static const char* MODEL_PATH = "vendor/models/SmolLM2-1.7B-Instruct-Q4_K_M.gguf";
+static const char* MODEL_PATH = "vendor/models/Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf";
+
+#define MAX_RESPONSE_SIZE (1024 * 10)
+#define MAX_PROMPT_SIZE (1024 * 10)
+#define MAX_USER_INPUT (1024 * 10)
 #define INITIAL_MSG_CAPACITY 8
+#define CMD_SZ (1024 * 10)
+#define CTX_SZ (1024 * 10)
+#define PROMPT_SZ (1024 * 10)
 
 // Logging callback for error output only
 void log_callback(enum ggml_log_level level, const char* text, void* user_data) {
@@ -120,12 +123,16 @@ void add_message(
 }
 
 int main(void) {
+  // Set console to UTF-8 mode
+  SetConsoleOutputCP(CP_UTF8);
+
   llama_log_set(log_callback, NULL);
   ggml_backend_load_all();
 
   struct llama_model_params model_params = llama_model_default_params();
   model_params.n_gpu_layers = 99;
 
+  printf("Loading %s\n", MODEL_PATH);
   struct llama_model* model = llama_model_load_from_file(MODEL_PATH, model_params);
   if (!model) {
     return fprintf(stderr, "Failed to load model\n"), 1;
@@ -133,8 +140,8 @@ int main(void) {
 
   const struct llama_vocab* vocab = llama_model_get_vocab(model);
   struct llama_context_params ctx_params = llama_context_default_params();
-  ctx_params.n_ctx = 2048;
-  ctx_params.n_batch = 2048;
+  ctx_params.n_ctx = CTX_SZ;
+  ctx_params.n_batch = CTX_SZ;
   struct llama_context* ctx = llama_init_from_model(model, ctx_params);
   if (!ctx) {
     return fprintf(stderr, "Failed to initialize context\n"), 1;
@@ -150,35 +157,57 @@ int main(void) {
   char* formatted = (char*)malloc(ctx_params.n_ctx);
   int formatted_capacity = ctx_params.n_ctx, prev_len = 0;
 
-  int new_len;
   const char* chat_template = llama_model_chat_template(model, NULL);
-  // add_message(&messages, &msg_count, &msg_capacity, "user", INIT_PROMPT);
-  // int new_len =
-  //     apply_chat_template(chat_template, messages, msg_count, 1, &formatted, &formatted_capacity);
-  // if (new_len < 0) {
-  //   return fprintf(stderr, "Template application failed\n"), 1;
-  // }
+  // Read initial prompt from prompts/system.md
+  FILE* f = fopen("prompts/system.md", "rb");
+  if (!f) {
+    return fprintf(stderr, "Failed to open prompts/system.md\n"), 1;
+  }
+  fseek(f, 0, SEEK_END);
+  long fsize = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  char* system_prompt = (char*)malloc(fsize + 1);
+  if (!system_prompt) {
+    fclose(f);
+    return fprintf(stderr, "Failed to allocate memory for INIT_PROMPT\n"), 1;
+  }
+  fread(system_prompt, 1, fsize, f);
+  system_prompt[fsize] = '\0';
+  fclose(f);
+
+  add_message(&messages, &msg_count, &msg_capacity, "user", system_prompt);
+  int new_len =
+      apply_chat_template(chat_template, messages, msg_count, 1, &formatted, &formatted_capacity);
+  if (new_len < 0) {
+    return fprintf(stderr, "Template application failed\n"), 1;
+  }
 
   char prompt[MAX_PROMPT_SIZE];
-  // int prompt_len = (new_len > MAX_PROMPT_SIZE - 1) ? MAX_PROMPT_SIZE - 1 : new_len;
-  // memcpy(prompt, formatted, prompt_len);
-  // prompt[prompt_len] = '\0';
+  int prompt_len = (new_len > MAX_PROMPT_SIZE - 1) ? MAX_PROMPT_SIZE - 1 : new_len;
+  memcpy(prompt, formatted, prompt_len);
+  prompt[prompt_len] = '\0';
 
-  // printf("\033[33m");
-  // char* response = generate_response(prompt, ctx, sampler, vocab);
-  // printf("\n\033[0m");
+  printf("\033[33m");
+  char* response = generate_response(prompt, ctx, sampler, vocab);
+  printf("\n\033[0m");
 
-  // add_message(&messages, &msg_count, &msg_capacity, "assistant", response);
-  // prev_len = llama_chat_apply_template(chat_template, messages, msg_count, 0, NULL, 0);
-  // if (prev_len < 0) {
-  //   return fprintf(stderr, "Template application failed\n"), 1;
-  // }
+  add_message(&messages, &msg_count, &msg_capacity, "assistant", response);
+  prev_len = llama_chat_apply_template(chat_template, messages, msg_count, 0, NULL, 0);
+  if (prev_len < 0) {
+    return fprintf(stderr, "Template application failed\n"), 1;
+  }
 
+  char user_input[MAX_USER_INPUT];
+  int input_len = 0;
+  bool keep_input = false;
   while (1) {
     printf("\033[32m> \033[0m");
-    char user_input[MAX_USER_INPUT];
-    user_input[0] = '\0';
-    int input_len = 0;
+    if (!keep_input) {
+      // printf("not keeping input\n");
+      user_input[0] = '\0';
+      input_len = 0;
+    }
     int c;
     // detect Ctrl+Z (ASCII 26) as end of input.
     while ((c = getchar()) != EOF && c != 26 && input_len < MAX_USER_INPUT - 1) {
@@ -197,22 +226,51 @@ int main(void) {
     }
 
     int prompt_len = new_len - prev_len;
-    if (prompt_len > MAX_PROMPT_SIZE - 1)
+    if (prompt_len > MAX_PROMPT_SIZE - 1) {
       prompt_len = MAX_PROMPT_SIZE - 1;
+    }
     memcpy(prompt, formatted + prev_len, prompt_len);
     prompt[prompt_len] = '\0';
 
+    // printf("prompt %s", prompt);
     printf("\033[33m");
     char* response = generate_response(prompt, ctx, sampler, vocab);
     printf("\n\033[0m");
 
+    // Check if the response contains a command request using regex
+    keep_input = false;
+    char command[CMD_SZ] = {0};
+    int coffset = 0, roffset = 0, rlen = 0;
+    while (-1 !=
+           (rlen = re_match_group("```\\s*e?x?e?c?\\s*", "\\s*```", response + roffset, command))) {
+      roffset += rlen;
+      char out[CMD_SZ] = {0}, err[CMD_SZ] = {0}, res[CMD_SZ] = {0};
+      int exec_code = -1;
+      exec_code = prompt_exec(command, out, err, res);
+      if (-1 != exec_code) {
+        printf("%s", res);
+
+        if (ask("🤖 Share result with LLM?")) {
+          input_len = strlen(res);
+          memcpy(user_input + coffset, res, input_len);
+          user_input[coffset + input_len] = 0;
+          coffset += input_len;
+          // add_message(&messages, &msg_count, &msg_capacity, "user", res);
+          // prev_len = llama_chat_apply_template(chat_template, messages, msg_count, 0, NULL, 0);
+          keep_input = true;
+        }
+      }
+    }
+
     add_message(&messages, &msg_count, &msg_capacity, "assistant", response);
     prev_len = llama_chat_apply_template(chat_template, messages, msg_count, 0, NULL, 0);
+    // prev_len = llama_chat_apply_template(chat_template, messages, msg_count, 0, NULL, 0);
     if (prev_len < 0) {
       return fprintf(stderr, "Template application failed\n"), 1;
     }
   }
 
+  free(system_prompt);
   for (int i = 0; i < msg_count; ++i) {
     free((char*)messages[i].content);
   }

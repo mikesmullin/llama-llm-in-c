@@ -1,15 +1,16 @@
 # Llama LLM in C
 
-Run an LLM on your GPU with Vulkan.
-
-![Tavern-Keeper NPC demo](docs/video/demo.gif)
+Run an LLM on your GPU with Vulkan.  
+This version has the power to run cmd.exe shell commands, but it will prompt you before it does so.
 
 ## Sources
 
-- Downloaded [SmolM2 model](https://huggingface.co/bartowski/SmolLM2-1.7B-Instruct-GGUF/blob/main/SmolLM2-1.7B-Instruct-Q4_K_M.gguf)
-  - ie. `vendor\models\SmolLM2-1.7B-Instruct-Q4_K_M.gguf`
+- Downloaded model
+  - ie. `vendor\models\Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf`
 
 ## Install
+
+**NOTE:** You only need to do this if you don't want to use what is already committed under `build/`.
 
 - Update the gitmodules in this repo
   ```
@@ -55,7 +56,7 @@ Run an LLM on your GPU with Vulkan.
 - Try the llama.cpp cli
   ```
   cd vendor\llama.cpp\build\bin\Release\
-  llama-simple-chat.exe -m ../../../../models/SmolLM2-1.7B-Instruct-Q4_K_M.gguf
+  llama-simple-chat.exe -m ../../../../models/Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf
   ```
 
 ## Compile
@@ -67,6 +68,3 @@ Run an LLM on your GPU with Vulkan.
 ```
   build\main.exe
 ```
-
-### Related
-- https://x.com/xenovacom/status/1951673018071069160
